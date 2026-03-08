@@ -1,0 +1,38 @@
+mattmc3/ez-compinit
+romkatv/powerlevel10k
+
+# If you use Oh-My-Zsh with antidote, load this plugin FIRST to set things up so you
+# don't have to worry about whether OMZ will work correctly.
+getantidote/use-omz
+
+# Regarding OMZ libs - you may choose to use all of OMZ's lib like so:
+#   ohmyzsh/ohmyzsh path:lib
+# -OR-
+# If you really know what you want and nothing else, you might be able to
+# choose only the specific libs you need:
+#   ohmyzsh/ohmyzsh path:lib/clipboard.zsh
+#   ohmyzsh/ohmyzsh path:lib/history.zsh
+#   ohmyzsh/ohmyzsh path:lib/completion.zsh
+# -OR-
+# You may decide not to load anything from lib at all.
+
+# Let's go ahead and use all of Oh My Zsh's lib directory.
+ohmyzsh/ohmyzsh path:lib
+
+# Now, let's pick our Oh My Zsh utilty plugins
+ohmyzsh/ohmyzsh path:plugins/colored-man-pages
+ohmyzsh/ohmyzsh path:plugins/copyfile
+ohmyzsh/ohmyzsh path:plugins/copypath
+
+# Add some programmer plugins
+ohmyzsh/ohmyzsh path:plugins/git
+ohmyzsh/ohmyzsh path:plugins/python
+
+zsh-users/zsh-syntax-highlighting
+zsh-users/zsh-autosuggestions
+
+# add completions functions to fpath
+zsh-users/zsh-completions kind:fpath path:src
+
+# run towards the BOTTOM of your .zsh_plugins.txt after fpath is populated
+belak/zsh-utils path:completion

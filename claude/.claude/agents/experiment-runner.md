@@ -149,14 +149,63 @@ If any of these are missing, infer reasonable defaults:
    ```
    Parse and store all key metrics (accuracy, F1, latency, cost, etc.).
 
-7. **Trace Analysis — Failure & Error Deep Dive** (CRITICAL):
+7. **Token Usage Extraction** (CRITICAL for cost analysis):
+
+   Extract token usage from MLflow traces to enable cross-run cost comparison.
+
+   ```bash
+   # List all traces for this run
+   source "$REPO_ROOT/venv/bin/activate"
+   mlflow traces search --experiment-id <EXP_ID> --run-id $RUN_ID --max-results 200 --output json > /tmp/traces.json
+   ```
+
+   Parse traces to extract token usage from LLM spans:
+   ```bash
+   python3 -c "
+   import json, sys
+
+   traces = json.load(open('/tmp/traces.json'))
+   total_input = 0
+   total_output = 0
+   total_tokens = 0
+   num_examples = len(traces)
+
+   for trace in traces:
+       # Look for token usage in trace attributes or span attributes
+       # Common locations: mlflow.chat.tokenUsage, llm.token_count.*
+       spans = trace.get('spans', trace.get('data', {}).get('spans', []))
+       for span in (spans if isinstance(spans, list) else []):
+           attrs = span.get('attributes', {})
+           # Check for mlflow.chat.tokenUsage
+           token_usage = attrs.get('mlflow.chat.tokenUsage', {})
+           if isinstance(token_usage, str):
+               token_usage = json.loads(token_usage)
+           if token_usage:
+               total_input += token_usage.get('prompt_tokens', 0)
+               total_output += token_usage.get('completion_tokens', 0)
+               total_tokens += token_usage.get('total_tokens', 0)
+
+   avg_per_example = total_tokens // num_examples if num_examples > 0 else 0
+   print(json.dumps({
+       'total_input_tokens': total_input,
+       'total_output_tokens': total_output,
+       'total_tokens': total_tokens,
+       'avg_tokens_per_example': avg_per_example,
+       'num_examples': num_examples
+   }, indent=2))
+   "
+   ```
+
+   If the trace format differs (e.g., token usage is nested differently), adapt the parsing. If token usage attributes are unavailable in traces, check run-level metrics or params for token counts. Note in results if token data was unavailable.
+
+8. **Trace Analysis — Failure & Error Deep Dive** (CRITICAL):
 
    After capturing aggregate metrics, you MUST inspect MLflow traces to find specific examples that explain the results. This is what differentiates a useful experiment report from a meaningless metrics dump.
 
    **Step 1: Retrieve traces for the run**
    ```bash
    # List traces associated with the run
-   mlflow traces list --experiment-id <EXP_ID> --run-id $RUN_ID --max-results 50 --output json
+   mlflow traces search --experiment-id <EXP_ID> --run-id $RUN_ID --max-results 50 --output json
    ```
    If the CLI doesn't support trace listing directly, check for trace artifacts:
    ```bash
@@ -209,13 +258,69 @@ If any of these are missing, infer reasonable defaults:
 
    **If MLflow traces are unavailable**: Fall back to parsing stdout/stderr from the eval run for per-example results. Many eval frameworks print individual pass/fail results. Capture what you can and note the limitation.
 
-8. **Generate Cumulative Patch**:
+9. **Per-Sample Score Extraction** (CRITICAL for cross-run comparison):
+
+   Extract structured per-sample assessment data using `mlflow traces search --extract-fields`. This gives the experiment-manager the raw data needed to compare individual examples across runs.
+
+   ```bash
+   source "$REPO_ROOT/venv/bin/activate"
+   mlflow traces search \
+     --experiment-id <EXP_ID> \
+     --run-id $RUN_ID \
+     --max-results 200 \
+     --output json \
+     --extract-fields "info.trace_id,info.request_preview,info.response_preview,info.assessments.*.assessment_name,info.assessments.*.feedback.value,info.assessments.*.expectation.value,info.assessments.*.rationale"
+   ```
+
+   This returns per-trace JSON with: query text (`request_preview`), model response (`response_preview`), and all scorer assessments (name, value, expected value, rationale).
+
+   Parse the output into a per-sample table:
+   ```bash
+   python3 -c "
+   import json, sys
+
+   traces = json.load(sys.stdin)
+   rows = []
+   for t in traces:
+       info = t.get('info', t)
+       query = info.get('request_preview', '')[:120]
+       response = info.get('response_preview', '')[:120]
+       trace_id = info.get('trace_id', 'N/A')
+
+       assessments = info.get('assessments', [])
+       scores = {}
+       expected = ''
+       for a in (assessments if isinstance(assessments, list) else []):
+           name = a.get('assessment_name', 'unknown')
+           val = a.get('feedback', {}).get('value', 'N/A')
+           exp = a.get('expectation', {}).get('value', '')
+           scores[name] = val
+           if exp:
+               expected = str(exp)[:120]
+
+       rows.append({
+           'trace_id': trace_id,
+           'query': query,
+           'expected': expected,
+           'response': response,
+           'scores': scores
+       })
+
+   print(json.dumps(rows, indent=2))
+   " < /tmp/per_sample_scores.json
+   ```
+
+   Save the `mlflow traces search --extract-fields` output to `/tmp/per_sample_scores.json` first, then parse. Include the resulting per-sample table in your structured results (see `### Per-Sample Scores` section below).
+
+   If `--extract-fields` is not supported by the installed MLflow version, fall back to the basic `mlflow traces search` output and parse assessments from the full trace data. Note the limitation in results.
+
+10. **Generate Cumulative Patch**:
    ```bash
    git add -A && git commit -m "experiment: <run-name> - <brief description>"
    git diff $BASE_SHA > experiment.patch
    ```
 
-9. **Store Patch in MLflow** (CRITICAL — this is the reproducibility artifact):
+11. **Store Patch in MLflow** (CRITICAL — this is the reproducibility artifact):
    ```bash
    source "$REPO_ROOT/venv/bin/activate"
    mlflow artifacts log-artifact \
@@ -238,6 +343,7 @@ If any of these are missing, infer reasonable defaults:
    - Update properties:
      - Status: `Completed` (or `Failed`)
      - Key Metrics: Formatted string of top metrics (e.g., "F1: 0.87, Accuracy: 0.92, Latency: 1.2s")
+     - MLflow Experiment URL: Full clickable URL (e.g., `http://127.0.0.1:5000/#/experiments/76`)
      - MLflow Run ID: The run ID
      - Branch: `exp-run-<slug>`
      - Base SHA: The BASE_SHA
@@ -247,6 +353,7 @@ If any of these are missing, infer reasonable defaults:
      - Notes: Any anomalies or observations
    - Update page content with a structured summary:
      - **Changes Made**: Bullet list of all modifications
+     - **Diff**: If the cumulative diff is reasonably short (under ~200 lines), include the full diff in a fenced code block (```diff ... ```) so the reader can see exactly what changed without leaving Notion. If the diff is too large, include a summary of the files changed with line counts and note that the full patch is stored in MLflow artifacts.
      - **Quantitative Results**: All metrics with values
      - **Failure Analysis**: Summary of failure categories, counts, and patterns identified from trace inspection
      - **Representative Failure Examples**: Up to 5 concrete examples showing input, expected output, actual output, and analysis of why it failed (include trace IDs)
@@ -298,7 +405,26 @@ If any of these are missing, infer reasonable defaults:
 
    (up to 5 examples)
 
+   ### Token Usage
+   - **Total Input Tokens**: <total_input_tokens>
+   - **Total Output Tokens**: <total_output_tokens>
+   - **Total Tokens**: <total_tokens>
+   - **Avg Tokens/Example**: <avg_tokens_per_example>
+   - **Num Examples**: <num_examples>
+
+   ### Per-Sample Scores
+   Per-sample assessment data extracted via `mlflow traces search --extract-fields`.
+
+   | # | Query (truncated) | Expected | Response (truncated) | <Scorer 1> | <Scorer 2> | ... | Trace ID |
+   |---|------------------|----------|---------------------|------------|------------|-----|----------|
+   | 1 | "What year did..." | 1969 | "The year was 1969" | yes | 1.0 | ... | abc123 |
+   | 2 | "Who founded..." | John Doe | "Jane Smith founded" | no | 0.0 | ... | def456 |
+
+   (Include ALL examples, not just failures. This enables the experiment-manager to do
+   cross-run per-sample comparison by joining on the query text.)
+
    ### MLflow
+   - **Experiment URL**: <full clickable URL, e.g., http://127.0.0.1:5000/#/experiments/76>
    - **Run ID**: <run_id>
    - **Experiment ID**: <exp_id>
 
