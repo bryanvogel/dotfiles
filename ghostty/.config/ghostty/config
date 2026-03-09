@@ -1,4 +1,6 @@
+font-family=FiraCode Nerd Font Mono
 font-size=16
+theme=Everforest Dark Hard
 
 keybind = opt+cmd+h=goto_split:left
 keybind = opt+cmd+j=goto_split:bottom
