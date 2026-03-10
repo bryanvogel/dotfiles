@@ -39,3 +39,4 @@ export PATH="$HOME/.local/bin:$PATH"
 
 alias vim='nvim'
 alias wm='workmux'
+alias gs='git status'
