@@ -221,7 +221,7 @@ return {
           map("gr", vim.lsp.buf.references, "Go to references")
           map("gI", vim.lsp.buf.implementation, "Go to implementation")
           map("gy", vim.lsp.buf.type_definition, "Go to type definition")
-          map("K", vim.lsp.buf.hover, "Hover documentation")
+          map("gh", vim.lsp.buf.hover, "Hover documentation")
           map("<leader>rn", vim.lsp.buf.rename, "Rename symbol")
           map("<leader>ca", vim.lsp.buf.code_action, "Code action")
           map("<leader>ds", vim.lsp.buf.document_symbol, "Document symbols")
@@ -312,6 +312,21 @@ return {
       require("octo").setup({
         use_local_fs = true,
       })
+    end,
+  },
+
+  -- Tmux navigation
+  {
+    "christoomey/vim-tmux-navigator",
+    lazy = false,
+    init = function()
+      vim.g.tmux_navigator_no_mappings = 1
+    end,
+    config = function()
+      vim.keymap.set("n", "<S-h>", "<cmd>TmuxNavigateLeft<cr>")
+      vim.keymap.set("n", "<S-j>", "<cmd>TmuxNavigateDown<cr>")
+      vim.keymap.set("n", "<S-k>", "<cmd>TmuxNavigateUp<cr>")
+      vim.keymap.set("n", "<S-l>", "<cmd>TmuxNavigateRight<cr>")
     end,
   },
 
