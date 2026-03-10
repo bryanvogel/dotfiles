@@ -16,9 +16,11 @@ Managed with [GNU Stow](https://www.gnu.org/software/stow/).
 - [GNU Stow](https://www.gnu.org/software/stow/) — symlink manager
 - [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter) — required for Neovim treesitter highlighting (syntax highlighting for classes, variables, etc.)
 - [Antidote](https://getantidote.github.io/) — Zsh plugin manager
+- [tmux](https://github.com/tmux/tmux) — terminal multiplexer
+- [workmux](https://github.com/raine/workmux) — tmux workspace manager
 
 ```sh
-brew install stow tree-sitter-cli antidote
+brew install stow tree-sitter-cli antidote tmux raine/workmux/workmux
 ```
 
 ## Setup

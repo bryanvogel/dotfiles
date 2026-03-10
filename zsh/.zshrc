@@ -38,3 +38,4 @@ export GPG_TTY=$(tty)
 export PATH="$HOME/.local/bin:$PATH"
 
 alias vim='nvim'
+alias wm='workmux'
