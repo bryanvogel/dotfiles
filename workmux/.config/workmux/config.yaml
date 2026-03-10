@@ -1,1 +1,12 @@
+agent: claude
+
+panes:
+  - command: nvim
+  - command: claude
+    focus: true
+    split: horizontal
+
+files:
+  copy:
+    - .env
 nerdfont: true
